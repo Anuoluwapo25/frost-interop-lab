@@ -13,6 +13,7 @@
   },
   "scripts": {
     "test": "node --test test/*.test.ts",
+    "demo": "node src/demo.ts",
     "lab": "node src/cli.ts"
   }
 }
