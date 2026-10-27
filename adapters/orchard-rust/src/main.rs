@@ -57,7 +57,7 @@ fn derive_fvk(req: &Value) -> Result<Value, String> {
     }
     let fvk = FullViewingKey::from_bytes(&fvkb).ok_or("FullViewingKey::from_bytes rejected the key")?;
     let address = fvk.address_at(0u32, Scope::External).to_raw_address_bytes();
-    let ufvk = UnifiedFullViewingKey::new(None, Some(fvk.clone()))
+    let ufvk = UnifiedFullViewingKey::from_orchard_fvk(fvk.clone())
         .map_err(|e| format!("{e:?}"))?
         .encode(&Network::TestNetwork);
     Ok(json!({
