@@ -6,6 +6,10 @@
 
 A conformance and interoperability test lab for Zcash FROST wallets: shared vectors, a plug-in adapter protocol, and a report of which implementations actually work together.
 
+## Why Core & Tooling
+
+This is the unglamorous work the FROST wallets are built on. It doesn't compete with any of the six wallets; it lets all of them check their key derivation and backups against shared vectors and against each other, before a user finds out the hard way.
+
 ## The problem
 
 FROST lets a group control shielded ZEC together, with no single member able to spend. At least six teams are building FROST wallets for Zcash: Zkool, Zafe, Konclave, Quorum, NoirWallet and OpenPGP Wallet. They share the FROST signing library, but each defines its own address derivation, signer messages and backups. One builder in the [October grant thread](https://forum.zcashcommunity.com/t/interoperable-frost-co-signing-for-shielded-zec-open-specs-and-a-reference-implementation/58172) put it this way: *"each wallet is defining its own coordinator-to-signer messages and its own share backups."*
