@@ -35,7 +35,8 @@ A shared spec is being written. Until now nothing tested implementations against
 
 ## Results
 
-- The TypeScript and Python implementations pass every vector and agree on every random case. With Zafe's own checker, that makes three independent implementations agreeing on the ZIP 2005 vectors.
+- The official `orchard` + `zcash_keys` crates pass every vector, including the ZIP 2005 default addresses and UFVKs, and agree with both of our implementations on 200 random cases per derivation (built and run in GitHub Actions).
+- The TypeScript and Python implementations pass every vector and agree on every random case. With Zafe's own checker, that makes four independent implementations agreeing on the ZIP 2005 vectors.
 - The broken example is caught on both bugs: `rivk` reduced mod p instead of q (fails 8 of 8 vectors and 100 of 100 random cases), and a backup decoder accepting invalid participant IDs.
 - The derivation split is demonstrated: the same group gives a different `rivk`, and so a different address, under legacy and ZIP 2005.
 
