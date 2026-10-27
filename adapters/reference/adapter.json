@@ -1,0 +1,6 @@
+{
+  "name": "reference",
+  "description": "This lab's TypeScript implementation (BLAKE2b, BLAKE3, Pallas, bech32m written from the specs)",
+  "kind": "reference",
+  "command": ["node", "adapter.ts"]
+}

@@ -1,0 +1,6 @@
+{
+  "name": "broken-example",
+  "description": "Deliberately buggy: ZIP 2005 rivk reduced mod p instead of q, and backups accept id > n",
+  "kind": "example",
+  "command": ["node", "adapter.ts"]
+}

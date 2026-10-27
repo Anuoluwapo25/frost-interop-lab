@@ -1,0 +1,5 @@
+node_modules/
+reports/
+adapters/orchard-rust/target/
+__pycache__/
+.DS_Store

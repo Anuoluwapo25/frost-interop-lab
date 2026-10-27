@@ -1,0 +1,18 @@
+[package]
+name = "orchard-adapter"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+description = "FROST Interop Lab adapter built on the official orchard and zcash_keys crates"
+publish = false
+
+[dependencies]
+blake2b_simd = "1"
+blake3 = "1"
+ff = "0.13"
+hex = "0.4"
+orchard = "0.15"
+pasta_curves = "0.5"
+serde_json = "1"
+zcash_keys = { version = "0.15", features = ["orchard"] }
+zcash_protocol = "0.10"

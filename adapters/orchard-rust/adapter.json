@@ -1,0 +1,7 @@
+{
+  "name": "orchard-rust",
+  "description": "Official orchard + zcash_keys crates; also checks default addresses and UFVKs",
+  "kind": "library",
+  "command": ["./target/release/orchard-adapter"],
+  "build": "cd adapters/orchard-rust && cargo build --release"
+}

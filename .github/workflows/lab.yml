@@ -1,0 +1,21 @@
+name: lab
+on: [push, pull_request]
+jobs:
+  lab:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Build the orchard-rust adapter
+        run: cargo build --release --manifest-path adapters/orchard-rust/Cargo.toml
+      - run: npm test
+      - name: Compatibility report
+        run: node src/cli.ts run --fuzz 200 --adapters reference,python-stdlib,orchard-rust
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: report
+          path: reports/

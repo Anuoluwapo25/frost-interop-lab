@@ -1,0 +1,6 @@
+{
+  "name": "python-stdlib",
+  "description": "Independent Python implementation (standard library only), derivation after Zafe's checker",
+  "kind": "library",
+  "command": ["python3", "-I", "adapter.py"]
+}
