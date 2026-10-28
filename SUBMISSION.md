@@ -8,7 +8,7 @@ A conformance and interoperability test lab for Zcash FROST wallets: shared vect
 
 ## Why Core & Tooling
 
-This is the unglamorous work the FROST wallets are built on. It doesn't compete with any of the six wallets; it lets all of them check their key derivation and backups against shared vectors and against each other, before a user finds out the hard way.
+This is groundwork the FROST wallets depend on. It doesn't compete with any of the six wallets; it lets all of them check their key derivation and backups against shared vectors and against each other, before a user finds out the hard way.
 
 ## The problem
 
@@ -73,7 +73,7 @@ Node 22.18+ and Python 3, with nothing to install. Rust is needed for the `orcha
 4. Track the group-descriptor spec and the backup ZIP as they settle.
 5. A hosted, CI-regenerated public compatibility matrix.
 
-## Honest limitations
+## Limitations
 
 - The ZIP 2005 vectors are not yet official ZIP vectors.
 - The backup vectors haven't been checked against Zkool's binary.
