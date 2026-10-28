@@ -7,6 +7,7 @@ export const AREA_LABEL: Record<Area, string> = {
   "derive:legacy": "Key derivation (legacy)",
   "derive:zip2005-use-qsk": "Key derivation (ZIP 2005 use_qsk)",
   backup: "zkfrost v1 backups",
+  signing: "FROST signing (RedPallas)",
 };
 
 // Long hex values are shortened to their ends; other text is kept whole up to a limit.
@@ -24,6 +25,12 @@ export function toMarkdown(r: Report): string {
   const lines: string[] = [];
   lines.push(`# FROST Interop Lab report`, "");
   lines.push(`${r.generatedAt} · seed \`${r.seed}\` · ${r.fuzzCases} random cases per area`, "");
+  if (r.spend) {
+    lines.push(`## End to end: a FROST group spends an Orchard note`, "");
+    lines.push(`Signers: ${r.spend.signers.join(", ")}. Bundle built, proved and validated by ${r.spend.builder}. Result: **${r.spend.ok ? "valid" : "FAILED"}**`, "");
+    for (const st of r.spend.steps) lines.push(`${st.ok ? "- ✓" : "- ✗"} **${st.step}**: ${st.detail}`);
+    lines.push("");
+  }
   lines.push(`## Conformance to the shared vectors`, "");
   lines.push(`| Adapter | Kind | ${AREAS.map((a) => AREA_LABEL[a]).join(" | ")} |`);
   lines.push(`| --- | --- | ${AREAS.map(() => "---").join(" | ")} |`);
@@ -105,10 +112,16 @@ main{max-width:1000px;margin:0 auto;padding:28px 16px 64px}h1{margin:0 0 4px;fon
 table{border-collapse:collapse;width:100%}th,td{padding:8px 10px;border-top:1px solid var(--line);text-align:left;vertical-align:middle}thead th{border-top:0;color:var(--muted);font-size:13px}
 th small{display:block;color:var(--muted);font-weight:400;font-size:12px}td.compatible{color:var(--ok)}td.incompatible{color:var(--bad);font-weight:600}td.untested{color:var(--muted)}td.self{background:var(--bg)}
 .m{display:inline-grid;place-items:center;width:26px;height:26px;border-radius:6px;margin-right:4px;font-weight:700}.m.compatible{background:var(--okbg);color:var(--ok)}.m.incompatible{background:var(--badbg);color:var(--bad)}.m.untested{color:var(--muted);border:1px solid var(--line)}
+.steps{list-style:none;padding:0}.steps li{display:grid;grid-template-columns:22px 150px 1fr;gap:8px;padding:6px 0;border-top:1px solid var(--line);overflow-wrap:anywhere}.steps li:first-child{border-top:0}.steps .ok{color:var(--ok);font-weight:700}.steps .bad{color:var(--bad);font-weight:700}
+@media (max-width:600px){.steps li{grid-template-columns:22px 1fr}.steps li span:last-child{grid-column:2}}
+.verdict{display:inline-block;padding:2px 10px;border-radius:999px;font-weight:600;font-size:13px}.verdict.ok{background:var(--okbg);color:var(--ok)}.verdict.bad{background:var(--badbg);color:var(--bad)}
 .legend{color:var(--muted);font-size:13px;margin-top:10px}code{font-family:ui-monospace,Menlo,monospace;font-size:12.5px}ul{margin:0;padding-left:18px}li{margin:4px 0}
 </style></head><body><main>
 <h1>Which Zcash FROST implementations work together</h1>
 <p class="sub">FROST Interop Lab · ${esc(r.generatedAt)} · seed <code>${esc(r.seed)}</code> · ${r.fuzzCases} random cases per area</p>
+${r.spend ? `<div class="card"><h2>End to end: a FROST group spends an Orchard note <span class="verdict ${r.spend.ok ? "ok" : "bad"}">${r.spend.ok ? "valid" : "failed"}</span></h2>
+<p class="legend" style="margin:0 0 8px">Key shares held by ${esc(r.spend.signers.join(", "))}. The bundle is built, proved and validated by the official orchard crate (${esc(r.spend.builder)}). The note is in a local commitment tree, so the transaction is valid but not broadcast.</p>
+<ul class="steps">${r.spend.steps.map((st) => `<li><span class="${st.ok ? "ok" : "bad"}">${st.ok ? "✓" : "✗"}</span><strong>${esc(st.step)}</strong><span>${esc(st.detail)}</span></li>`).join("")}</ul></div>` : ""}
 <div class="card"><h2>Pairwise compatibility</h2>
 <table><thead><tr><th></th>${names.map((n) => `<th>${esc(n)}</th>`).join("")}</tr></thead>
 <tbody>${names.map((a) => `<tr><th scope="row">${esc(a)}</th>${names.map((b) => cell(a, b)).join("")}</tr>`).join("")}</tbody></table>

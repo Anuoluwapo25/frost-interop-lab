@@ -1,7 +1,9 @@
 #!/usr/bin/env python3
 """Independent Python implementation of the lab's ops, using only the standard library.
 
-Key derivation follows Zafe's independent checker
+FROST signing implements FROST(Pallas, BLAKE2b-512) with re-randomization from
+RFC 9591 and the hash definitions in ZF's reddsa crate, with affine point
+arithmetic written here. Key derivation follows Zafe's independent checker
 (https://github.com/zafe-cash/zafe/blob/main/scripts/check_zip2005_vectors.py, Apache-2.0),
 with the legacy profile added from the protocol spec. Bech32m follows the BIP 350
 reference algorithm. It shares no code with the TypeScript reference adapter.
@@ -9,6 +11,7 @@ reference algorithm. It shares no code with the TypeScript reference adapter.
 
 import hashlib
 import json
+import secrets
 import sys
 
 P = 0x40000000000000000000000000000000224698FC094CF91B992D30ED00000001
@@ -177,11 +180,165 @@ def backup_decode(s):
     return {"backup": {"id": ident, "t": t, "n": n, "share": p[4:36].hex(), "sk": p[36:68].hex()}}
 
 
+# --- Pallas points (affine; None is the identity) and FROST(Pallas, BLAKE2b-512) -------
+
+def _sqrt(a):
+    """Tonelli-Shanks mod P, or None if a is not a square."""
+    if a == 0:
+        return 0
+    if pow(a, (P - 1) // 2, P) != 1:
+        return None
+    q, s = P - 1, 0
+    while q % 2 == 0:
+        q, s = q // 2, s + 1
+    z = next(z for z in range(2, 100) if pow(z, (P - 1) // 2, P) == P - 1)
+    m, c, t, r = s, pow(z, q, P), pow(a, q, P), pow(a, (q + 1) // 2, P)
+    while t != 1:
+        i, t2 = 0, t
+        while t2 != 1:
+            t2, i = t2 * t2 % P, i + 1
+        b = pow(c, 1 << (m - i - 1), P)
+        m, c, t, r = i, b * b % P, t * b * b % P, r * b % P
+    return r
+
+
+def pt_add(p1, p2):
+    if p1 is None:
+        return p2
+    if p2 is None:
+        return p1
+    (x1, y1), (x2, y2) = p1, p2
+    if x1 == x2:
+        if (y1 + y2) % P == 0:
+            return None
+        lam = 3 * x1 * x1 * pow(2 * y1, -1, P) % P
+    else:
+        lam = (y2 - y1) * pow(x2 - x1, -1, P) % P
+    x3 = (lam * lam - x1 - x2) % P
+    return (x3, (lam * (x1 - x3) - y1) % P)
+
+
+def pt_mul(pt, k):
+    if pt is G:
+        return _mul_g(k)
+    acc = None
+    for bit in bin(k % Q)[2:]:
+        acc = pt_add(acc, acc)
+        if bit == "1":
+            acc = pt_add(acc, pt)
+    return acc
+
+
+def pt_encode(pt):
+    if pt is None:
+        return bytes(32)
+    x, y = pt
+    b = bytearray(le32(x))
+    b[31] |= (y & 1) << 7
+    return bytes(b)
+
+
+def pt_decode(b):
+    if len(b) != 32:
+        raise ValueError("point must be 32 bytes")
+    sign, x = b[31] >> 7, int.from_bytes(b, "little") & ((1 << 255) - 1)
+    y = _sqrt((x ** 3 + 5) % P) if x < P else None
+    if y is None or (x == 0 and sign == 0):
+        raise ValueError("invalid point")
+    return (x, y if y & 1 == sign else P - y)
+
+
+G = pt_decode(bytes.fromhex("63c975b884721a8d0ca1707be30c7f0c5f445f3e7c188d3b06d6f128b32355b7"))
+_G_TABLE = [G]  # [2^i]G, so multiplying G needs additions only
+for _ in range(254):
+    _G_TABLE.append(pt_add(_G_TABLE[-1], _G_TABLE[-1]))
+
+
+def _mul_g(k):
+    acc, k, i = None, k % Q, 0
+    while k:
+        if k & 1:
+            acc = pt_add(acc, _G_TABLE[i])
+        k, i = k >> 1, i + 1
+    return acc
+
+
+def _h(person, data):
+    return hashlib.blake2b(data, digest_size=64, person=person).digest()
+
+
+def _hs(person, data):
+    return int.from_bytes(_h(person, data), "little") % Q
+
+
+def scalar(hexstr):
+    s = int.from_bytes(bytes.fromhex(hexstr), "little")
+    if len(hexstr) != 64 or s >= Q:
+        raise ValueError("not a canonical scalar")
+    return s
+
+
+def frost_keygen(t, n):
+    coeffs = [secrets.randbelow(Q) for _ in range(t)]
+    shares = {i: sum(c * pow(i, k, Q) for k, c in enumerate(coeffs)) % Q for i in range(1, n + 1)}
+    if pt_mul(G, coeffs[0])[1] & 1:  # Orchard needs an even-y ak: negate everything
+        coeffs[0], shares = Q - coeffs[0], {i: (Q - v) % Q for i, v in shares.items()}
+    return {"group_key": pt_encode(pt_mul(G, coeffs[0])).hex(),
+            "shares": [{"id": i, "signing_share": le32(v).hex(), "verifying_share": pt_encode(pt_mul(G, v)).hex()}
+                       for i, v in shares.items()]}
+
+
+NONCES = {}
+
+
+def frost_commit(req):
+    share = le32(scalar(req["signing_share"]))
+    d = _hs(b"FROST_RedPallasN", secrets.token_bytes(32) + share)
+    e = _hs(b"FROST_RedPallasN", secrets.token_bytes(32) + share)
+    NONCES[(req["session"], req["participant"])] = (d, e)
+    return {"hiding": pt_encode(pt_mul(G, d)).hex(), "binding": pt_encode(pt_mul(G, e)).hex()}
+
+
+def frost_sign(req):
+    d, e = NONCES.pop((req["session"], req["participant"]))
+    me, alpha = req["participant"], scalar(req["randomizer"])
+    msg = bytes.fromhex(req["message"])
+    coms = sorted(req["commitments"], key=lambda c: c["id"])
+    rk = pt_add(pt_decode(bytes.fromhex(req["group_key"])), pt_mul(G, alpha))
+    enc_list = b"".join(le32(c["id"]) + bytes.fromhex(c["hiding"]) + bytes.fromhex(c["binding"]) for c in coms)
+    prefix = pt_encode(rk) + _h(b"FROST_RedPallasM", msg) + _h(b"FROST_RedPallasC", enc_list)
+    rho = {c["id"]: _hs(b"FROST_RedPallasR", prefix + le32(c["id"])) for c in coms}
+    R = None
+    for c in coms:
+        R = pt_add(R, pt_add(pt_decode(bytes.fromhex(c["hiding"])), pt_mul(pt_decode(bytes.fromhex(c["binding"])), rho[c["id"]])))
+    chal = _hs(b"Zcash_RedPallasH", pt_encode(R) + pt_encode(rk) + msg)
+    lam = 1
+    for c in coms:
+        if c["id"] != me:
+            lam = lam * c["id"] * pow(c["id"] - me, -1, Q) % Q
+    z = (d + e * rho[me] + lam * (scalar(req["signing_share"]) + alpha) * chal) % Q
+    return {"signature_share": le32(z).hex()}
+
+
+def redpallas_verify(req):
+    sig, msg = bytes.fromhex(req["signature"]), bytes.fromhex(req["message"])
+    try:
+        rk, R = pt_decode(bytes.fromhex(req["rk"])), pt_decode(sig[:32])
+    except ValueError:
+        return {"valid": False}
+    S = int.from_bytes(sig[32:], "little")
+    if len(sig) != 64 or S >= Q:
+        return {"valid": False}
+    chal = _hs(b"Zcash_RedPallasH", sig[:32] + pt_encode(rk) + msg)
+    return {"valid": pt_mul(G, S) == pt_add(R, pt_mul(rk, chal))}
+
+
 def handle(req):
     op = req.get("op")
     if op == "hello":
         return {"name": "python-stdlib", "version": "0.1.0",
-                "ops": ["derive_fvk", "backup_encode", "backup_decode"], "profiles": ["legacy", "zip2005-use-qsk"]}
+                "ops": ["derive_fvk", "backup_encode", "backup_decode", "frost_keygen", "frost_commit", "frost_sign",
+                        "redpallas_verify"], "profiles": ["legacy", "zip2005-use-qsk"]}
     if op == "derive_fvk":
         if req["profile"] not in ("legacy", "zip2005-use-qsk"):
             return {"error": {"code": "unsupported"}}
@@ -190,6 +347,14 @@ def handle(req):
         return {"string": backup_encode(req["backup"])}
     if op == "backup_decode":
         return backup_decode(req["string"])
+    if op == "frost_keygen":
+        return frost_keygen(req["t"], req["n"])
+    if op == "frost_commit":
+        return frost_commit(req)
+    if op == "frost_sign":
+        return frost_sign(req)
+    if op == "redpallas_verify":
+        return redpallas_verify(req)
     return {"error": {"code": "unsupported"}}
 
 

@@ -59,9 +59,54 @@ The `zkfrost` v1 member backup string (bech32m, HRP `zkfrost`, 68 bytes: version
 
 A string you reject must get an error response, e.g. `{"id": 4, "error": {"code": "invalid_params"}}`. The lab checks *that* you reject it; the code is reported but not required to match.
 
+## FROST signing
+
+FROST(Pallas, BLAKE2b-512) with re-randomization, as in ZF's `reddsa` crate (`frost` feature) and `frost-rerandomized`. Scalars and points use their 32-byte little-endian encodings; participant ids are integers from 1. The lab is the coordinator: it picks the signers, relays commitments, aggregates the shares and verifies the result.
+
+### `frost_keygen`
+
+Trusted-dealer key generation. The group key must have even y, so it is a valid Orchard `ak`.
+
+```json
+{"id": 5, "op": "frost_keygen", "t": 2, "n": 3}
+{"id": 5, "group_key": "<32 bytes>", "shares": [{"id": 1, "signing_share": "<32 bytes>", "verifying_share": "<32 bytes>"}, …]}
+```
+
+### `frost_commit` (round 1)
+
+Generate and keep the nonces for this `session` and `participant`; return the commitments.
+
+```json
+{"id": 6, "op": "frost_commit", "session": "s1", "participant": 2, "signing_share": "…"}
+{"id": 6, "hiding": "<32 bytes>", "binding": "<32 bytes>"}
+```
+
+### `frost_sign` (round 2)
+
+Sign with the nonces from round 1 (use them once, then forget them). `randomizer` is α. For an Orchard spend it is the spend's `alpha` from the PCZT, and the signature must verify under `rk = group_key + [α]G`.
+
+```json
+{"id": 7, "op": "frost_sign", "session": "s1", "participant": 2, "signing_share": "…", "group_key": "…",
+ "message": "<sighash>", "randomizer": "<32 bytes>", "commitments": [{"id": 1, "hiding": "…", "binding": "…"}, {"id": 2, …}]}
+{"id": 7, "signature_share": "<32 bytes>"}
+```
+
+### `redpallas_verify`
+
+Verify a RedPallas SpendAuth signature. Reject non-canonical encodings, including `S ≥ q`.
+
+```json
+{"id": 8, "op": "redpallas_verify", "rk": "<32 bytes>", "message": "…", "signature": "<64 bytes: R ‖ S>"}
+{"id": 8, "valid": true}
+```
+
+### `orchard_spend_prepare` and `orchard_spend_finish` (optional)
+
+Only the spend builder implements these; today that's `orchard-rust`. `prepare` builds and proves a bundle that spends a note held by the group, from `profile`, `sk` and `ak` as in `derive_fvk`, and returns its `sighash`, `randomizer` and `rk`. `finish` takes the group's `signature` for the same `session`, adds the binding signature, and returns `valid` from the `orchard` crate's `BatchValidator`.
+
 ## Planned ops
 
 These are next, and their shape is open for discussion with wallet teams:
 
-- **`frost_commit` / `frost_sign`:** round 1 and round 2 of RedPallas FROST signing with a given randomizer. The lab mixes signers from different implementations in one group and verifies the aggregate signature on a real PCZT.
+- **`frost_dkg_*`:** distributed key generation, so groups can be formed across wallets as well as signed across them.
 - **`group_descriptor`:** export and import of the shared group descriptor, once the spec settles.

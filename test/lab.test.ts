@@ -30,10 +30,18 @@ test("lab: independent implementations agree, the broken example is caught", asy
   const broken = report.adapters.find((a) => a.name === "broken-example")!;
   assert.equal(broken.areas["derive:zip2005-use-qsk"]!.failed, 8);
   assert.ok(broken.areas.backup!.failures.some((f) => f.case === "reject: participant id > n"));
+  assert.equal(pair("broken-example", "reference", "signing").status, "incompatible");
+  assert.ok(broken.areas.signing!.failures.some((f) => f.case.includes("non-canonical")));
+  assert.ok(broken.areas.signing!.failures.some((f) => /invalid signature share from broken-example/.test(f.note ?? "")));
+  assert.equal(report.adapters.find((a) => a.name === "reference")!.areas.signing!.failed, 0);
 
   // An adapter that isn't built is reported, not fatal.
   const rust = report.adapters.find((a) => a.name === "orchard-rust");
   if (rust && !rust.available) assert.match(rust.reason!, /cargo build/);
+  if (rust?.available) {
+    assert.equal(pair("orchard-rust", "reference", "signing").status, "compatible");
+    assert.ok(report.spend?.ok, JSON.stringify(report.spend?.steps));
+  }
 
   assert.match(toMarkdown(report), /Pairwise compatibility/);
   assert.match(toHtml(report), /<table>/);

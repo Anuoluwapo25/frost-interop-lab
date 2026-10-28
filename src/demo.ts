@@ -1,4 +1,5 @@
-// A narrated run for demos: the derivation split, then the lab catching a bug.
+// A narrated run for demos: the derivation split, the lab catching bugs, then
+// a FROST group split across implementations spending an Orchard note.
 
 import { loadManifests } from "./adapter.ts";
 import { hex, unhex } from "./crypto/hex.ts";
@@ -53,5 +54,20 @@ if (firstBug) {
   console.log(`   ${dim("Bug: rivk reduced mod p (base field) instead of q (scalar field).")}`);
   const backup = broken!.areas.backup?.failures[0];
   if (backup) console.log(`   Backups: ${backup.case}: ${backup.got?.slice(0, 40)}…`);
+  const signing = broken!.areas.signing?.failures ?? [];
+  const badShare = signing.find((f) => f.case.startsWith("sign"));
+  const malleable = signing.find((f) => f.case.includes("non-canonical"));
+  if (badShare) console.log(`   Signing: ${badShare.note}`);
+  console.log(`   ${dim("Bug: the signer ignores the randomizer α, so its share is for ak, not the spend's rk.")}`);
+  if (malleable) console.log(`   Verifying: accepted a signature with S + q ${dim("(malleable: a second valid encoding)")}`);
+}
+
+if (report.spend) {
+  console.log(bold("\n5. End to end: one FROST group, shares in different implementations, spends an Orchard note\n"));
+  for (const st of report.spend.steps) console.log(`   ${st.ok ? green("✓") : red("✗")} ${st.step.padEnd(19)} ${st.detail}`);
+  console.log(report.spend.ok
+    ? green(`\n   The orchard crate accepts the transaction: Halo2 proof, the group's spend authorization and the binding signature.`)
+    : red(`\n   The spend failed.`));
+  console.log(dim(`   The note sits in a local commitment tree, so the bundle is valid but not broadcast.`));
 }
 console.log(`\n   Full report: ${bold("node src/cli.ts run")} → reports/report.html\n`);
